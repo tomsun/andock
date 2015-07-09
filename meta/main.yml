@@ -1,0 +1,7 @@
+---
+galaxy_info:
+  author: Tom Sundström
+  description: An Ansible role that takes another role as input, runs on a Docker host and produces a Docker image.
+  min_ansible_version: 1.2
+
+dependencies: []

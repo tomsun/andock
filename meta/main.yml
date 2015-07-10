@@ -5,3 +5,8 @@ galaxy_info:
   min_ansible_version: 1.2
 
 dependencies: []
+
+# Execute andock once for every role that declare itself dependent on andock.
+# Ensures that more than one role can depend on andock within the scope of
+# a single `ansible-playbook` execution.
+allow_duplicates: yes

@@ -1,0 +1,97 @@
+---
+
+- name: Create temporary Dockerfile directory
+  file: >
+    path={{ andock_dockerfile_path }}
+    state=directory
+
+- name: Generate Dockerfile
+  template: >
+    src=Dockerfile.phusion-baseimage-enable-ssh.j2
+    dest={{ andock_dockerfile_path }}/Dockerfile
+
+- name: Include SSH public key
+  copy: >
+    src={{ andock_identity_file }}.pub
+    dest={{ andock_dockerfile_path }}/andock_identity_file.pub
+  when: andock_identity_file|default(false)
+
+- name: Give intermediate Docker image a name
+  set_fact: andock_intermediate_image={{ andock_image }}_tmp_andock_intermediate
+
+- debug: msg="Intermediate Docker image will be tagged {{ andock_intermediate_image }}"
+
+- name: Build a temporary intermediate Docker image from the parent image and the generated Dockerfile
+  shell: >
+    {{ andock_cmd_docker }} build -t {{ andock_intermediate_image | quote }} {{ andock_dockerfile_path | quote }}
+  register: andock_intermediate_image_result
+- debug: var=andock_intermediate_image_result.stdout_lines
+
+- name: Start a temporary Docker container from the parent image {{ andock_parent_image }}
+  shell: >
+    {{ andock_cmd_docker }} run -p 22 --detach=true {{ andock_intermediate_image | quote }}
+  register: andock_container_result
+- name: Store container id
+  set_fact: andock_container_id={{ andock_container_result.stdout }}
+- debug: var=andock_container_id
+
+- name: Get container ip address
+  shell: >
+    {{ andock_cmd_docker }} inspect {{ andock_container_id | quote }} | {{ _andock_cmd_parse_container_ip }}
+  register: andock_inspect_result
+- name: Store ip address
+  set_fact: andock_container_ip={{ andock_inspect_result.stdout }}
+- debug: var=andock_container_ip
+
+- name: Get container's mapped ssh port
+  shell: >
+    {{ andock_cmd_docker }} inspect {{ andock_container_id | quote }} | {{ _andock_cmd_parse_ssh_port }}
+  register: andock_inspect_result
+- name: Store ssh port
+  set_fact: andock_container_forwarded_ssh_port={{ andock_inspect_result.stdout }}
+- debug: var=andock_container_forwarded_ssh_port
+
+- name: Generate debugging oneliner for interactive SSH
+  set_fact: >
+    andock_cmd_ssh_interactive="/usr/bin/ssh -i {{ andock_identity_file | quote }} -p {{ andock_container_forwarded_ssh_port | quote }} root@{{ andock_docker_hostname | quote }}"
+- debug: msg="To interact with the temporary container for debugging purposes, one could now log in with {{ andock_cmd_ssh_interactive | quote }}"
+
+- name: Generate play file 'play-single-role.yml' in temporary copy of playbook
+  template: >
+    src=play-single-role.yml.j2
+    dest={{ andock_playbook_tempcopy }}/play-single-role.yml
+
+# Base playbook command
+- set_fact: >
+    andock_playbook_command="cd {{ andock_playbook_tempcopy }} && export ANSIBLE_HOST_KEY_CHECKING=False && {{ andock_cmd_ansible }} -i {{ andock_docker_hostname | quote }}:{{ andock_container_forwarded_ssh_port | quote }}, --private-key={{ andock_identity_file | quote }} --user=root"
+
+# Optionally use a specific explicitly defined ssh key
+- set_fact: >
+    andock_playbook_command="{{ andock_playbook_command }} --private-key={{ andock_identity_file | quote }}"
+  when: andock_identity_file|default(false)
+
+# Set play file as the last command
+- set_fact: >
+    andock_playbook_command="{{ andock_playbook_command }} play-single-role.yml"
+
+- debug: var=andock_role
+
+- name: >
+    Perform the Docker-agostic role inside the container (might take a while)
+  shell: >
+    {{ andock_playbook_command }}
+  register: andock_ansible_result
+
+- debug: var=andock_ansible_result.stdout_lines
+
+- name: Create a Docker image based on the temporary container's state
+  shell: >
+    {{ andock_cmd_docker }} commit {{ andock_container_id | quote }} {{ andock_image | quote }}
+
+- name: Remove temporary container
+  shell: >
+    {{ andock_cmd_docker }} rm -f {{ andock_container_id | quote }}
+
+- name: Remove temporary intermediate image
+  shell: >
+    {{ andock_cmd_docker }} rmi -f {{ andock_intermediate_image | quote }}

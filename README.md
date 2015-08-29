@@ -41,6 +41,25 @@ in the Docker image you produce and in the worst case, some component you rely o
 might have left temp files behind, etc.
 
 
+Workflow
+------------
+
+### Input to Andock
+
+- One "service playbook", which describe the service(s) to produce, typically
+in a Docker-agnostic way.
+
+- One "Docker playbook", where one or more roles declare Andock as a dependency,
+where each declaration includes the role to perform in the service playbook
+and the name of the Docker image to produce.
+
+The Docker playbook is typically performed from localhost targeting the Docker
+host machine - perhaps localhost in a dev scenario.
+
+The service playbook is performed from the docker host, targeting a temporary
+docker container.
+
+
 Requirements
 ------------
 

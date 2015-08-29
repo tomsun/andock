@@ -4,6 +4,37 @@
 - debug: var=andock_image
 - debug: var=andock_role
 
+- name: Use default `docker` path
+  set_fact: andock_cmd_docker="{{ _andock_cmd_docker }}"
+  when: ansible_distribution != "MacOSX" and not andock_cmd_docker|default(False)
+
+- name: Use default `docker` path for OS X, prefixed with a `docker-machine` based env setter
+  # When Ansible targets OS X and docker-machine is used to provide local Docker functionality,
+  # The Docker environment variables tend not to be set in the shell that Ansible uses.
+  #
+  # `docker-machine env <machine-name>` can be used to generate the appropriate variables.
+  # (see defaults/main.yml for details on how _andock_cmd_docker_osx_dockermachine is composed)
+  #
+  # This approach is probably fragile. A possible workaround when in trouble, is to specifiy
+  # andock_cmd_docker in --extra-vars
+  set_fact: andock_cmd_docker="{{ _andock_cmd_docker_osx_dockermachine }}"
+  when: ansible_distribution == "MacOSX" and not andock_cmd_docker|default(False)
+
+- name: Determine Docker hostname
+  set_fact: andock_docker_hostname="{{ _andock_docker_hostname }}"
+  when: ansible_distribution != "MacOSX" and not andock_docker_hostname|default(False)
+
+- name: Determine Docker hostname in OS X
+  # When using docker-machine and boot2docker, the desired host is in a VM - get its ip
+  shell: "{{ _andock_cmd_docker_hostname }}"
+  register: andock_docker_hostname_result
+  when: ansible_distribution == "MacOSX" and not andock_docker_hostname|default(False)
+- name: Store docker hostname
+  set_fact: andock_docker_hostname={{ andock_docker_hostname_result.stdout }}
+  when: ansible_distribution == "MacOSX" and not andock_docker_hostname|default(False)
+- debug: var=andock_docker_hostname
+  when: ansible_distribution == "MacOSX" and not andock_docker_hostname|default(False)
+
 - name: Get list of Docker images known to the Docker host
   shell: "{{ andock_cmd_docker }} images"
   args:

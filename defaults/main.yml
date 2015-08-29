@@ -5,9 +5,7 @@ andock_path: "{{ role_path }}"
 
 andock_dockerfile_path: "/tmp/andock_dockerfile_{{ andock_image }}"
 
-andock_docker_hostname: "localhost"
-
-andock_cmd_docker: "/usr/local/bin/docker"
+_andock_docker_hostname: "localhost"
 
 andock_cmd_ansible: "/usr/local/bin/ansible-playbook"
 
@@ -16,3 +14,16 @@ _andock_cmd_parse_container_ip: >
 
 _andock_cmd_parse_ssh_port: >
     python -c "import sys, json ; print json.loads(sys.stdin.read())[0][u'NetworkSettings'][u'Ports'][u'22/tcp'][0][u'HostPort']"
+
+# Internal default
+_andock_cmd_docker: "/usr/local/bin/docker"
+
+# OS X workarounds
+_andock_cmd_dockermachine: "/usr/local/bin/docker-machine"
+_andock_dockermachine_env: "default"
+_andock_add_vboxmanage_to_path: "PATH=$PATH:/usr/local/bin"
+_andock_cmd_dockermachine_getenv: "{{ _andock_cmd_dockermachine }} env {{ _andock_dockermachine_env }}"
+_andock_cmd_dockermachine_setenv: "eval $({{ _andock_cmd_dockermachine_getenv }})"
+_andock_cmd_docker_osx_dockermachine: "{{ _andock_add_vboxmanage_to_path }} && {{ _andock_cmd_dockermachine_setenv }} && {{ _andock_cmd_docker }}"
+_andock_cmd_docker_hostname: >
+    {{ _andock_add_vboxmanage_to_path }} && {{ _andock_cmd_dockermachine_setenv }} && {{ _andock_cmd_dockermachine }} ip {{ _andock_dockermachine_env }}

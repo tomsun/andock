@@ -1,0 +1,240 @@
+#!/usr/bin/env python
+
+# Andock build script (optional)
+#
+# Wraps `ansible-playbook` and initiates the build of an Andock image
+# (and Andock images it depends on)
+#
+# Useful for one-off builds where the Docker playbook does not have
+# any suitable plays - just roles - which we want to invoke
+# from the command line.
+#
+# The involved playbook(s) are copied to a temp directory and modified
+# slightly - mainly: adding the play file andock-build.yml
+
+from __future__ import print_function
+
+import argparse
+parser = argparse.ArgumentParser("build")
+from os import system as run
+import commands
+import shutil
+import errno
+import hashlib
+import base64
+import warnings as _warnings
+import os as _os
+import json
+
+from tempfile import mkdtemp
+
+parser.add_argument('-m', '--docker-playbook',
+    required=True,
+    help="""Path to the Ansible playbook that contain Andock-dependent roles
+        and describes which Docker images to build.""")
+
+parser.add_argument('-n', '--docker-role',
+    required=True,
+    help="""A role in the Docker playbook. Its corresponding Docker image
+        and images for any roles it depends on will be built.""")
+
+parser.add_argument('-p', '--playbook',
+    required=True,
+    help="""Path to the service playbook which contains the Docker-agnostic
+        role(s) that describe(s) what the resulting Docker image should contain.""")
+
+parser.add_argument('-d', '--docker-host',
+    help="Path to the docker daemon. Default: $DOCKER_HOST")
+
+parser.add_argument('-a', '--ansible-host',
+    help="""Path to the host that the Docker playbook should target and where
+        the `docker` command should be executed. Tends to be a host other than
+        --docker-host on "OS X", where boot2docker provides the `docker` command
+        locally but runs the Docker host in a VM.
+        Default: Derived from --docker-host or $DOCKER_HOST""")
+
+parser.add_argument('-v', '--meta-vars',
+    help="Ansible variables (as JSON string) to pass to the Ansible meta playbook")
+
+args = parser.parse_args()
+
+if args.docker_host is None:
+    docker_host = _os.getenv('DOCKERHOST', None)
+    if docker_host is None:
+        print("$DOCKER_HOST is not set and --docker-host was not specified")
+        exit(1)
+    print("Using default Docker host '%s'" % docker_host)
+else:
+    docker_host = args.docker_host
+    print("Using Docker host '%s'" % docker_host)
+
+
+import re
+
+if args.ansible_host is None:
+    # Check if docker-machine or boot2docker is installed
+    status_dockermachine, result = commands.getstatusoutput("which docker-machine")
+    status_boot2docker, result = commands.getstatusoutput("which boot2docker")
+    if status_dockermachine == 0 or status_boot2docker == 0:
+        # Likely scenario: Docker is running in a VM but `docker` is available on localhost
+        ansible_host = "localhost"
+        vm_manager = 'docker-machine' if status_dockermachine == 0 else 'boot2docker'
+        print("Setting Ansible host to '%s' since %s is installed locally" % (ansible_host, vm_manager))
+    else:
+        results = re.search('^tcp://([^:]*)(:)?([0-9]+)*$', docker_host)
+        try:
+            ansible_host = results.group(1)
+        except:
+            print("--ansible-host was not specified and could not be deduced from '%s'" % docker_host)
+            exit(1)
+        print("Setting Ansible host to '%s' based on Docker host '%s'" % (ansible_host, docker_host))
+else:
+    ansible_host = args.ansible_host
+    print("Using Ansible host '%s'" % ansible_host)
+
+# Tempdir manager - based on http://stackoverflow.com/a/19299884
+# http://svn.python.org/projects/python/branches/py3k/Lib/tempfile.py
+class TemporaryDirectory(object):
+    """Create and return a temporary directory. This has the same
+    behavior as mkdtemp but can be used as a context manager. For
+    example:
+
+        with TemporaryDirectory() as tmpdir:
+            ...
+
+    Upon exiting the context, the directory and everything contained
+    in it are removed.
+    """
+
+    def __init__(self, suffix="", prefix="tmp", dir=None):
+        self._closed = False
+        self.name = None # Handle mkdtemp raising an exception
+        self.name = mkdtemp(suffix, prefix, dir)
+
+    def __repr__(self):
+        return "<{} {!r}>".format(self.__class__.__name__, self.name)
+
+    def __enter__(self):
+        return self.name
+
+    def cleanup(self, _warn=False):
+        if self.name and not self._closed:
+            try:
+                self._rmtree(self.name)
+            except (TypeError, AttributeError) as ex:
+                # Issue #10188: Emit a warning on stderr
+                # if the directory could not be cleaned
+                # up due to missing globals
+                if "None" not in str(ex):
+                    raise
+                print("ERROR: {!r} while cleaning up {!r}".format(ex, self,),
+                      file=_sys.stderr)
+                return
+            self._closed = True
+            if _warn:
+                self._warn("Implicitly cleaning up {!r}".format(self),
+                           ResourceWarning)
+
+    def __exit__(self, exc, value, tb):
+        self.cleanup()
+
+    def __del__(self):
+        # Issue a ResourceWarning if implicit cleanup needed
+        self.cleanup(_warn=True)
+
+    # XXX (ncoghlan): The following code attempts to make
+    # this class tolerant of the module nulling out process
+    # that happens during CPython interpreter shutdown
+    # Alas, it doesn't actually manage it. See issue #10188
+    _listdir = staticmethod(_os.listdir)
+    _path_join = staticmethod(_os.path.join)
+    _isdir = staticmethod(_os.path.isdir)
+    _islink = staticmethod(_os.path.islink)
+    _remove = staticmethod(_os.remove)
+    _rmdir = staticmethod(_os.rmdir)
+    _warn = _warnings.warn
+
+    def _rmtree(self, path):
+        # Essentially a stripped down version of shutil.rmtree.  We can't
+        # use globals because they may be None'ed out at shutdown.
+        for name in self._listdir(path):
+            fullname = self._path_join(path, name)
+            try:
+                isdir = self._isdir(fullname) and not self._islink(fullname)
+            except OSError:
+                isdir = False
+            if isdir:
+                self._rmtree(fullname)
+            else:
+                try:
+                    self._remove(fullname)
+                except OSError:
+                    pass
+        try:
+            self._rmdir(path)
+        except OSError:
+            pass
+
+build_id = base64.b64encode(hashlib.new('sha1', _os.urandom(32)).digest()).replace('+', '').replace('/', '')[0:10].lower()
+buildimage_name = "andock/builder-%s" % build_id
+andock_path = _os.path.dirname(_os.path.abspath(__file__))
+
+print("Creating a temporary Docker image (tagged %s) for this build session" % buildimage_name)
+
+# Copy the playbooks to a temp dir
+with TemporaryDirectory() as tempdir:
+    print("Creating a temporary fork of the playbooks in '%s'" % tempdir)
+
+    print("Copying service playbook %s to temporary directory" % args.playbook)
+    shutil.copytree(args.playbook, "%s/playbook" % tempdir)
+
+    print("Copying Docker playbook with Andock-dependent roles %s to temporary directory" % args.docker_playbook)
+    shutil.copytree(args.docker_playbook, "%s/docker-playbook" % tempdir)
+
+    print("Copying andock role to Docker playbook")
+    shutil.copytree(andock_path, "%s/docker-playbook/roles/andock" % tempdir)
+
+    print("Generating play 'andock-build.yml' in Docker playbook that performs the selected Docker image-creating role '%s' on the Docker host" % args.docker_role)
+    f = open("%s/docker-playbook/andock-build.yml" % tempdir,"w")
+    f.write("""---
+- name: Perform Docker image-creating role '%s' on the selected Docker host(s)
+  hosts: dockerhosts
+
+  roles:
+  - %s
+
+""" % (args.docker_role, args.docker_role))
+    f.close()
+
+    # Display generated play
+    run("cat %s/docker-playbook/andock-build.yml" % tempdir)
+
+    print("Generating inventory 'andock-inventory.yml' in Docker playbook that contain docker host(s)")
+    f = open("%s/docker-playbook/andock-inventory.yml" % tempdir,"w")
+    f.write("""---
+[dockerhosts]
+%s
+
+""" % (ansible_host))
+    f.close()
+
+    # Display generated inventory
+    run("cat %s/docker-playbook/andock-inventory.yml" % tempdir)
+
+    if args.meta_vars:
+        print("Parsing meta vars")
+        print(args.meta_vars)
+        extra_vars = json.loads(args.meta_vars)
+    else:
+        extra_vars = {}
+    extra_vars['andock_playbook_tempcopy'] = "%s/playbook" % tempdir
+
+    playbook_cmd = "ansible-playbook -i andock-inventory.yml andock-build.yml"
+    if args.meta_vars is not None:
+        playbook_cmd += " --extra-vars '%s'" % json.dumps(extra_vars)
+
+    print("Running `%s`"% playbook_cmd)
+    run("cd %s/docker-playbook && %s" % (tempdir, playbook_cmd))
+
+# Removing temp directory, by ending with scope
+

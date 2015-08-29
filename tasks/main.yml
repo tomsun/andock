@@ -35,8 +35,24 @@
 - debug: var=andock_docker_hostname
   when: ansible_distribution == "MacOSX" and not andock_docker_hostname|default(False)
 
+- name: Perform all shell commands with a virtualenv active
+  set_fact: _andock_shell_prefix="source {{ andock_virtualenv }}/bin/activate && "
+  when: andock_virtualenv|default(False)
+
+- debug: var=_andock_shell_prefix
+
+- name: Use default `ansible-playbook` path
+  set_fact: andock_cmd_ansible="{{ _andock_cmd_ansible }}"
+  when: not andock_virtualenv|default(False)
+
+- name: Use virtualenv-default `ansible-playbook` path
+  set_fact: andock_cmd_ansible="{{ _andock_cmd_ansible_virtualenv }}"
+  when: andock_virtualenv|default(False)
+
 - name: Get list of Docker images known to the Docker host
-  shell: "{{ andock_cmd_docker }} images"
+  shell: >
+    {{ _andock_shell_prefix|default("")}}
+    {{ andock_cmd_docker }} images
   args:
     executable: "/bin/bash"
   register: andock_images

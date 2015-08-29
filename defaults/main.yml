@@ -7,16 +7,16 @@ andock_dockerfile_path: "/tmp/andock_dockerfile_{{ andock_image }}"
 
 _andock_docker_hostname: "localhost"
 
-andock_cmd_ansible: "/usr/local/bin/ansible-playbook"
-
 _andock_cmd_parse_container_ip: >
     python -c "import sys, json ; print json.loads(sys.stdin.read())[0][u'NetworkSettings'][u'IPAddress']"
 
 _andock_cmd_parse_ssh_port: >
     python -c "import sys, json ; print json.loads(sys.stdin.read())[0][u'NetworkSettings'][u'Ports'][u'22/tcp'][0][u'HostPort']"
 
-# Internal default
+# Internal defaults
 _andock_cmd_docker: "/usr/local/bin/docker"
+_andock_cmd_ansible: "/usr/local/bin/ansible-playbook"
+_andock_cmd_ansible_virtualenv: "ansible-playbook"
 
 # OS X workarounds
 _andock_cmd_dockermachine: "/usr/local/bin/docker-machine"

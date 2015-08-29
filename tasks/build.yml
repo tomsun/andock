@@ -23,12 +23,14 @@
 
 - name: Build a temporary intermediate Docker image from the parent image and the generated Dockerfile
   shell: >
+    {{ _andock_shell_prefix|default("")}}
     {{ andock_cmd_docker }} build -t {{ andock_intermediate_image | quote }} {{ andock_dockerfile_path | quote }}
   register: andock_intermediate_image_result
 - debug: var=andock_intermediate_image_result.stdout_lines
 
 - name: Start a temporary Docker container from the parent image {{ andock_parent_image }}
   shell: >
+    {{ _andock_shell_prefix|default("")}}
     {{ andock_cmd_docker }} run -p 22 --detach=true {{ andock_intermediate_image | quote }}
   register: andock_container_result
 - name: Store container id
@@ -37,6 +39,7 @@
 
 - name: Get container ip address
   shell: >
+    {{ _andock_shell_prefix|default("")}}
     {{ andock_cmd_docker }} inspect {{ andock_container_id | quote }} | {{ _andock_cmd_parse_container_ip }}
   register: andock_inspect_result
 - name: Store ip address
@@ -45,6 +48,7 @@
 
 - name: Get container's mapped ssh port
   shell: >
+    {{ _andock_shell_prefix|default("")}}
     {{ andock_cmd_docker }} inspect {{ andock_container_id | quote }} | {{ _andock_cmd_parse_ssh_port }}
   register: andock_inspect_result
 - name: Store ssh port
@@ -79,6 +83,7 @@
 - name: >
     Perform the Docker-agostic role inside the container (might take a while)
   shell: >
+    {{ _andock_shell_prefix|default("")}}
     {{ andock_playbook_command }}
   register: andock_ansible_result
 
@@ -86,12 +91,15 @@
 
 - name: Create a Docker image based on the temporary container's state
   shell: >
+    {{ _andock_shell_prefix|default("")}}
     {{ andock_cmd_docker }} commit {{ andock_container_id | quote }} {{ andock_image | quote }}
 
 - name: Remove temporary container
   shell: >
+    {{ _andock_shell_prefix|default("")}}
     {{ andock_cmd_docker }} rm -f {{ andock_container_id | quote }}
 
 - name: Remove temporary intermediate image
   shell: >
+    {{ _andock_shell_prefix|default("")}}
     {{ andock_cmd_docker }} rmi -f {{ andock_intermediate_image | quote }}

@@ -98,6 +98,10 @@ Role Variables
 - andock_cmd_ansible
   The docker command. Default: `/usr/local/bin/ansible-playbook`
 
+- andock_virtualenv
+  Optionally activate a virtualenv before executing the shell commands
+  that Andock depend on.
+
 
 Example Playbook
 ----------------

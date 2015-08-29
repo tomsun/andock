@@ -53,6 +53,9 @@ parser.add_argument('-a', '--ansible-host',
         locally but runs the Docker host in a VM.
         Default: Derived from --docker-host or $DOCKER_HOST""")
 
+parser.add_argument('-e', '--virtualenv-path',
+    help="Optionally execute all shell commands in a virtualenv")
+
 parser.add_argument('-v', '--meta-vars',
     help="Ansible variables (as JSON string) to pass to the Ansible meta playbook")
 
@@ -228,6 +231,9 @@ with TemporaryDirectory() as tempdir:
     else:
         extra_vars = {}
     extra_vars['andock_playbook_tempcopy'] = "%s/playbook" % tempdir
+
+    if args.virtualenv_path:
+        extra_vars['andock_virtualenv'] = args.virtualenv_path
 
     playbook_cmd = "ansible-playbook -i andock-inventory.yml andock-build.yml"
     if args.meta_vars is not None:

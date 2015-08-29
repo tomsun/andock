@@ -4,6 +4,43 @@ Andock
 An Ansible role that can be used as a dependency in other roles, to produce Docker images.
 
 
+Motivation
+----------
+
+- Ansible playbooks are generic recipies for how to put a machine in a specific state.
+
+- Dockerfiles are recipies for how to put a Docker continer in a specific state.
+
+If we buy into the appeal of Docker (or [solutions like it](https://github.com/coreos/rkt)),
+the quickest, most natural way to get started is to describe what the container should contain
+in a Dockerfile.
+
+On the other hand, if we write our service recipies as Ansible playbooks rather than Dockerfiles,
+then they are compatible as is for deployment to non-Docker hosts too
+(VM:s, physical servers, your local computer, ...)
+
+
+Alternatives
+------------
+
+[ansible-docker-base](https://github.com/ansible/ansible-docker-base)
+accomplishes pretty much the same thing, by including Ansible and the playbook
+inside the container. If this is not a deal-breaker, then ansible-docker-base
+is probably a simpler approach. A goal with Andock is to produce a container
+that has never seen the playbook it was built from.
+
+Example use-case where running Ansible from outside the container is a benefit:
+Your playbook uses a secret key to produce a public signature. You want to
+include the signature in the container, but not the secret.
+
+You can probably accomplish some separation towards the same goal with
+ansible-docker-base too, if you temporarily mount the playbook as a
+[Docker volume](http://docs.docker.com/userguide/dockervolumes/) but you do
+put a lot more trust in all the moving parts involved: The secret key has existed
+in the Docker image you produce and in the worst case, some component you rely on
+might have left temp files behind, etc.
+
+
 Requirements
 ------------
 

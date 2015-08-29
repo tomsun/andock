@@ -16,7 +16,7 @@ from __future__ import print_function
 
 import argparse
 parser = argparse.ArgumentParser("build")
-from os import system as run
+from os import system as _run
 import commands
 import shutil
 import errno
@@ -60,6 +60,12 @@ parser.add_argument('-v', '--meta-vars',
     help="Ansible variables (as JSON string) to pass to the Ansible meta playbook")
 
 args = parser.parse_args()
+
+def run(cmd):
+    if args.virtualenv_path:
+        return _run("source %s/bin/activate && %s" % (args.virtualenv_path, cmd))
+    else:
+        return _run(cmd)
 
 if args.docker_host is None:
     docker_host = _os.getenv('DOCKERHOST', None)

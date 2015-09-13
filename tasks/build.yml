@@ -101,5 +101,11 @@
 
 - name: Remove temporary intermediate image
   shell: >
-    {{ _andock_shell_prefix|default("")}}
-    {{ andock_cmd_docker }} rmi -f {{ andock_intermediate_image | quote }}
+    (
+        {{ _andock_shell_prefix|default("")}}
+        {{ andock_cmd_docker }} rmi -f {{ andock_intermediate_image | quote }}
+    ) || (
+    sleep 3 &&
+        {{ _andock_shell_prefix|default("")}}
+        {{ andock_cmd_docker }} rmi -f {{ andock_intermediate_image | quote }}
+    )

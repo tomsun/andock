@@ -92,7 +92,7 @@
 - name: Create a Docker image based on the temporary container's state
   shell: >
     {{ _andock_shell_prefix|default("")}}
-    {{ andock_cmd_docker }} commit {{ andock_container_id | quote }} {{ andock_image | quote }}
+    {{ andock_cmd_docker }} commit {{ _andock_commit_options|default("") }} {{ andock_container_id | quote }} {{ andock_image | quote }}
 
 - name: Remove temporary container
   shell: >
